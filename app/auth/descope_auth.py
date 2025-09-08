@@ -2,8 +2,8 @@ from functools import wraps
 from flask import request, jsonify, g
 import os
 from descope import DescopeClient, AuthException
-import jwt
-import requests
+# import jwt
+# import requests
 
 class DescopeAuth:
     """Real Descope authentication handler"""
@@ -35,7 +35,8 @@ class DescopeAuth:
             'upload_file': ['user', 'admin', 'processor'],
             'approve_processing': ['admin', 'approver'],
             'schedule_meeting': ['admin', 'scheduler', 'processor'],
-            'view_status': ['user', 'admin', 'processor', 'approver', 'scheduler']
+            'view_status': ['user', 'admin', 'processor', 'approver', 'scheduler'],
+            'process' : ['user', 'admin', 'processor']
         }
     
     def _init_mock_mode(self):

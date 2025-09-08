@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 import uuid
 from werkzeug.utils import secure_filename
+from functools import wraps  # Add this import
+import asyncio  # Add this import
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -16,7 +18,18 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # Rest of your imports...
 from auth.descope_auth import require_auth, DescopeAuth
 from workflow import DocumentWorkflow, WorkflowState
-from agents.agent_b import AgentB
+# from agents.agent_b import AgentB
+
+from agents.AgentB.verifier import (
+    verify_contract_clauses,
+    generate_clause_suggestion,
+    generate_plain_english_summary,
+    answer_contract_question,
+    extract_text_from_pdf,
+    extract_text_from_docx,
+    extract_text_from_image
+)
+
 
 
 # Initialize Flask app
@@ -25,16 +38,94 @@ CORS(app)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Initialize components
 workflow_manager = DocumentWorkflow()
-agent_b = AgentB()
+# agent_b = AgentB()
 auth_handler = DescopeAuth()
 
 # In-memory storage (use database in production)
 sessions = {}
+
+# Async wrapper for Flask routes
+# def async_route(f):
+#     @wraps(f)
+#     def wrapper(*args, **kwargs):
+#         try:
+#             # Check if there's a running event loop
+#             loop = asyncio.get_event_loop()
+#             if loop.is_running():
+#                 # If there's a running loop, we need to handle it differently
+#                 # For Flask with async support, just return the coroutine
+#                 return asyncio.create_task(f(*args, **kwargs))
+#             else:
+#                 # No running loop, safe to use asyncio.run
+#                 return asyncio.run(f(*args, **kwargs))
+#         except RuntimeError:
+#             # No event loop, create one
+#             return asyncio.run(f(*args, **kwargs))
+#     return wrapper
+
+def sync_async(async_func):
+    @wraps(async_func)
+    def wrapper(*args, **kwargs):
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(async_func(*args, **kwargs))
+            finally:
+                loop.close()
+        except Exception as e:
+            print(f"Async execution error: {e}")
+            raise
+    return wrapper
+
+def extract_text_from_uploaded_file(file_path: str, content_type: str) -> str:
+    try:
+        with open(file_path, 'rb') as file:
+            file_bytes = file.read()
+            
+        if content_type == "application/pdf":
+            return extract_text_from_pdf(file_bytes)
+        elif content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            return extract_text_from_docx(file_bytes)
+        elif content_type in ["image/jpeg", "image/png"]:
+            return extract_text_from_image(file_bytes)
+        else:
+            return ""
+    except Exception as e:
+        print(f"Error extracting text from file: {e}")
+        return ""
+
+
+
+def extract_text_from_uploaded_file(file_path: str, content_type: str) -> str:
+    """Extract text from uploaded file"""
+    try:
+        with open(file_path, 'rb') as file:
+            file_bytes = file.read()
+            
+        # Use the extraction functions from agents.AgentB.verifier.py
+        if content_type == "application/pdf":
+            from agents.AgentB.verifier import extract_text_from_pdf
+            return extract_text_from_pdf(file_bytes)
+        elif content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            from agents.AgentB.verifier import extract_text_from_docx
+            return extract_text_from_docx(file_bytes)
+        elif content_type in ["image/jpeg", "image/png"]:
+            from agents.AgentB.verifier import extract_text_from_image
+            return extract_text_from_image(file_bytes)
+        else:
+            return ""
+    except Exception as e:
+        print(f"Error extracting text from file: {e}")
+        return ""
+
 
 @app.route('/', methods=['GET'])
 def home():
@@ -55,96 +146,54 @@ def get_profile():
         'permissions': auth_handler.permissions,
         'message': 'Authentication successful'
     })
-
 @app.route('/upload', methods=['POST'])
 @require_auth(permission='upload_file')
-def upload_file():
-    """Step 1: Handle file upload and risk assessment"""
+def upload_and_start_workflow():
+    """Combined: Handle file upload, risk assessment, and start workflow"""
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
-        
+
         file = request.files['file']
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
-        
+
         # Create uploads directory if it doesn't exist
         upload_dir = app.config['UPLOAD_FOLDER']
         os.makedirs(upload_dir, exist_ok=True)
-        
+
         # Save file
         filename = secure_filename(file.filename)
         session_id = str(uuid.uuid4())
         file_path = os.path.join(upload_dir, f"{session_id}_{filename}")
         file.save(file_path)
-        
-        print(f"File saved to: {file_path}")
-        
-        # Agent B: Risk Assessment
-        agent_b_instance = AgentB()
-        
-        # Validate file
-        if not agent_b_instance.validate_file_for_analysis(file_path):
-            os.remove(file_path)  # Clean up
-            return jsonify({'error': 'Invalid file type or size'}), 400
-        
-        # Analyze file
-        risk_assessment = agent_b_instance.analyze_file(file_path, {
-            'user_id': g.current_user['user_id'],
-            'upload_time': datetime.now().isoformat()
-        })
-        
-        # Store session data
-        sessions[session_id] = {
-            'user_id': g.current_user['user_id'],
-            'user_email': g.current_user['email'],
-            'file_path': file_path,
-            'filename': filename,
-            'risk_assessment': risk_assessment,
-            'created_at': datetime.now().isoformat(),
-            'status': 'analyzed'
-        }
-        
-        print(f"Session created: {session_id}")
-        
-        return jsonify({
-            'session_id': session_id,
-            'risk_assessment': risk_assessment,
-            'status': 'analysis_complete',
-            'user': g.current_user['email']
-        })
-        
-    except Exception as e:
-        print(f"Upload error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/start-workflow', methods=['POST'])
-@require_auth(permission='upload_file')
-def start_workflow():
-    """Step 2: Start workflow after risk assessment"""
-    try:
-        data = request.get_json()
-        session_id = data.get('session_id')
-        
-        if not session_id:
-            return jsonify({'error': 'Session ID is required'}), 400
-        
-        if session_id not in sessions:
-            return jsonify({'error': 'Invalid session ID'}), 400
-        
-        session_data = sessions[session_id]
-        
-        # Check if user owns this session
-        if session_data['user_id'] != g.current_user['user_id']:
-            return jsonify({'error': 'Unauthorized access to session'}), 403
-        
+        print(f"File saved to: {file_path}")
+
+        content_type = file.content_type or "application/octet-stream"
+
+
+        # Agent B: Risk Assessment
+        # agent_b_instance = AgentB()
+
+        # # Validate file
+        # if not agent_b_instance.validate_file_for_analysis(file_path):
+        #     os.remove(file_path)  # Clean up
+        #     return jsonify({'error': 'Invalid file type or size'}), 400
+
+        # # Analyze file
+        # risk_assessment = agent_b_instance.analyze_file(file_path, {
+        #     'user_id': g.current_user['user_id'],
+        #     'upload_time': datetime.now().isoformat()
+        # })
+
         # Create initial workflow state
         initial_state = WorkflowState(
             session_id=session_id,
             user_id=g.current_user['user_id'],
-            file_path=session_data.get('file_path', ''),
-            filename=session_data.get('filename', ''),
-            risk_assessment=session_data.get('risk_assessment', {}),
+            file_path=file_path,
+            filename=filename,
+            # risk_assessment=risk_assessment,
             user_approved=False,
             meeting_date='',
             signing_result={},
@@ -157,30 +206,279 @@ def start_workflow():
             human_input=None,
             next_node=''
         )
-        
+
         print(f"Starting workflow for session: {session_id}")
-        
-        # Start the workflow
-        result = workflow_manager.start_workflow(initial_state)
-        
-        # Update session
-        sessions[session_id]['workflow_state'] = result
-        sessions[session_id]['status'] = 'workflow_started'
-        
-        print(f"Workflow started, waiting for: {result.get('input_type', 'unknown')}")
-        
+
+        # Start the workflow immediately
+        workflow_result = workflow_manager.start_workflow(initial_state)
+
+        # Store session data with both risk assessment and workflow state
+        sessions[session_id] = {
+            'user_id': g.current_user['user_id'],
+            'user_email': g.current_user['email'],
+            'file_path': file_path,
+            'filename': filename,
+            'content-type' : content_type,
+            # 'risk_assessment': risk_assessment,
+            'workflow_state': workflow_result,
+            'created_at': datetime.now().isoformat(),
+            'status': 'workflow_started'
+        }
+
+        print(f"Session created and workflow started: {session_id}")
+
         return jsonify({
             'session_id': session_id,
+            # 'risk_assessment': risk_assessment,
+            'content-type' : content_type,
             'workflow_started': True,
-            'waiting_for_input': result.get('waiting_for_input', False),
-            'input_type': result.get('input_type', ''),
-            'risk_assessment': session_data.get('risk_assessment', {}),
-            'message': 'Workflow started. Please review the risk assessment and approve or reject.'
+            'waiting_for_input': workflow_result.get('waiting_for_input', False),
+            'input_type': workflow_result.get('input_type', ''),
+            'status': 'analysis_complete_workflow_started',
+            'user': g.current_user['email'],
+            'message': 'File analyzed and workflow started. Please review the risk assessment and approve or reject.'
         })
-        
+
     except Exception as e:
-        print(f"Start workflow error: {str(e)}")
+        print(f"Upload and workflow start error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/contract-verify', methods=['GET'])
+@require_auth(permission='process')
+@sync_async
+async def contract_verify():
+    """GET - Analyze contract clauses (session_id as query param)"""
+    try:
+        session_id = request.args.get('session_id')
+        
+        if not session_id:
+            return jsonify({'error': 'session_id query parameter is required'}), 400
+
+        if session_id not in sessions:
+            return jsonify({'error': 'Invalid session ID'}), 400
+
+        session_data = sessions[session_id]
+        
+        # Check authorization
+        if session_data['user_id'] != g.current_user['user_id']:
+            return jsonify({'error': 'Unauthorized access to session'}), 403
+
+        # Check if analysis already exists (cached)
+        if 'contract_analysis' in session_data:
+            return jsonify({
+                'session_id': session_id,
+                'analysis': session_data['contract_analysis'],
+                'status': 'cached_result',
+                'message': 'Contract analysis retrieved from cache'
+            })
+
+        # Get API key from header for fresh analysis
+        # gemini_api_key = request.headers.get('X-API-Key')
+        # if not gemini_api_key:
+        #     return jsonify({'error': 'Gemini API key required in X-API-Key header'}), 400
+
+        # Perform fresh analysis
+        file_path = session_data['file_path']
+        # content_type = session_data['content_type']
+        content_type = sessions[session_id].get('content-type')
+
+        
+        with open(file_path, 'rb') as file:
+            file_bytes = file.read()
+
+        verification_result = await verify_contract_clauses(
+            file_bytes=file_bytes,
+            content_type=content_type,
+            api_key=GOOGLE_API_KEY
+        )
+
+        if "error" in verification_result:
+            return jsonify({'error': verification_result["error"]}), 400
+
+        # Cache the result
+        sessions[session_id]['contract_analysis'] = verification_result
+
+        return jsonify({
+            'session_id': session_id,
+            'analysis': verification_result.get('analysis', []),
+            'status': 'fresh_analysis',
+            'message': 'Contract analysis completed and cached'
+        })
+
+    except Exception as e:
+        print(f"Contract verification error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/contract-summarize', methods=['GET'])
+@require_auth(permission='process')
+@sync_async
+async def contract_summarize():
+    """GET - Generate contract summary (session_id as query param)"""
+    try:
+        session_id = request.args.get('session_id')
+        
+        if not session_id:
+            return jsonify({'error': 'session_id query parameter is required'}), 400
+
+        if session_id not in sessions:
+            return jsonify({'error': 'Invalid session ID'}), 400
+
+        session_data = sessions[session_id]
+        
+        # Check authorization
+        if session_data['user_id'] != g.current_user['user_id']:
+            return jsonify({'error': 'Unauthorized access to session'}), 403
+
+        # Check if summary already exists (cached)
+        if 'contract_summary' in session_data:
+            return jsonify({
+                'session_id': session_id,
+                'summary': session_data['contract_summary'],
+                'status': 'cached_result',
+                'message': 'Contract summary retrieved from cache'
+            })
+
+        # Get API key for fresh summary
+        # gemini_api_key = request.headers.get('X-API-Key')
+        # if not gemini_api_key:
+        #     return jsonify({'error': 'Gemini API key required in X-API-Key header'}), 400
+
+        # Extract text and generate summary
+        file_path = session_data['file_path']
+        content_type = sessions[session_id].get('content-type')
+        
+        contract_text = extract_text_from_uploaded_file(file_path, content_type)
+        if not contract_text:
+            return jsonify({'error': 'Could not extract text from file'}), 400
+
+        summary = await generate_plain_english_summary(contract_text, GOOGLE_API_KEY)
+
+        # Cache the result
+        sessions[session_id]['contract_summary'] = summary
+
+        return jsonify({
+            'session_id': session_id,
+            'summary': summary,
+            'status': 'fresh_summary',
+            'message': 'Contract summary generated and cached'
+        })
+
+    except Exception as e:
+        print(f"Contract summarization error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/contract-suggest-clause', methods=['GET'])
+@require_auth(permission='process')
+@sync_async
+async def contract_suggest_clause():
+    """GET - Get clause suggestions (session_id as query param)"""
+    try:
+        session_id = request.args.get('session_id')
+        clause_name = request.args.get('clause_name')
+        risky_text = request.args.get('risky_text', '')
+        
+        if not session_id:
+            return jsonify({'error': 'session_id query parameter is required'}), 400
+        
+        if not clause_name:
+            return jsonify({'error': 'clause_name query parameter is required'}), 400
+
+        if session_id not in sessions:
+            return jsonify({'error': 'Invalid session ID'}), 400
+
+        session_data = sessions[session_id]
+        
+        # Check authorization
+        if session_data['user_id'] != g.current_user['user_id']:
+            return jsonify({'error': 'Unauthorized access to session'}), 403
+
+        # Get API key
+        # gemini_api_key = request.headers.get('X-API-Key')
+        # if not gemini_api_key:
+        #     return jsonify({'error': 'Gemini API key required in X-API-Key header'}), 400
+
+        # Generate suggestion
+        suggestion = await generate_clause_suggestion(
+            clause_name=clause_name,
+            api_key=GOOGLE_API_KEY,
+            risky_text=risky_text
+        )
+
+        return jsonify({
+            'session_id': session_id,
+            'clause_name': clause_name,
+            'suggestion': suggestion,
+            'status': 'suggestion_generated',
+            'message': f'Clause suggestion for "{clause_name}" generated'
+        })
+
+    except Exception as e:
+        print(f"Clause suggestion error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# @app.route('/start-workflow', methods=['POST'])
+# @require_auth(permission='upload_file')
+# def start_workflow():
+#     """Step 2: Start workflow after risk assessment"""
+#     try:
+#         data = request.get_json()
+#         session_id = data.get('session_id')
+        
+#         if not session_id:
+#             return jsonify({'error': 'Session ID is required'}), 400
+        
+#         if session_id not in sessions:
+#             return jsonify({'error': 'Invalid session ID'}), 400
+        
+#         session_data = sessions[session_id]
+        
+#         # Check if user owns this session
+#         if session_data['user_id'] != g.current_user['user_id']:
+#             return jsonify({'error': 'Unauthorized access to session'}), 403
+        
+#         # Create initial workflow state
+#         initial_state = WorkflowState(
+#             session_id=session_id,
+#             user_id=g.current_user['user_id'],
+#             file_path=session_data.get('file_path', ''),
+#             filename=session_data.get('filename', ''),
+#             risk_assessment=session_data.get('risk_assessment', {}),
+#             user_approved=False,
+#             meeting_date='',
+#             signing_result={},
+#             scheduling_result={},
+#             workflow_complete=False,
+#             final_status='',
+#             error='',
+#             waiting_for_input=True,
+#             input_type='',
+#             human_input=None,
+#             next_node=''
+#         )
+        
+#         print(f"Starting workflow for session: {session_id}")
+        
+#         # Start the workflow
+#         result = workflow_manager.start_workflow(initial_state)
+        
+#         # Update session
+#         sessions[session_id]['workflow_state'] = result
+#         sessions[session_id]['status'] = 'workflow_started'
+        
+#         print(f"Workflow started, waiting for: {result.get('input_type', 'unknown')}")
+        
+#         return jsonify({
+#             'session_id': session_id,
+#             'workflow_started': True,
+#             'waiting_for_input': result.get('waiting_for_input', False),
+#             'input_type': result.get('input_type', ''),
+#             'risk_assessment': session_data.get('risk_assessment', {}),
+#             'message': 'Workflow started. Please review the risk assessment and approve or reject.'
+#         })
+        
+#     except Exception as e:
+#         print(f"Start workflow error: {str(e)}")
+#         return jsonify({'error': str(e)}), 500
 
 @app.route('/provide-input', methods=['POST'])
 @require_auth()
