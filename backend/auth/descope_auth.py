@@ -33,8 +33,8 @@ class DescopeAuth:
         # Define permissions for different workflow stages
         self.permissions = {
             'upload_file': ['user', 'admin', 'processor'],
-            'approve_processing': ['admin', 'approver'],
-            'schedule_meeting': ['admin', 'scheduler', 'processor'],
+            'approve_processing': ['user','admin', 'approver'],
+            'schedule_meeting': ['user','admin', 'scheduler', 'processor'],
             'view_status': ['user', 'admin', 'processor', 'approver', 'scheduler'],
             'process' : ['user', 'admin', 'processor']
         }
@@ -128,16 +128,16 @@ def require_auth(permission=None):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # Get token from header
             auth_header = request.headers.get('Authorization')
             
-            if not auth_header:
+            if not auth_header or not auth_header.startswith('Bearer '):
                 return jsonify({'error': 'Missing authorization header'}), 401
             
-            if not auth_header.startswith('Bearer '):
-                return jsonify({'error': 'Invalid authorization header format. Use: Bearer <token>'}), 401
-            
             token = auth_header.split(' ')[1]
+            
+            # Debug logging
+            print(f"Received token: {token[:20]}...")
+            print(f"Token segments: {len(token.split('.'))}")
             
             # Initialize auth handler
             auth_handler = DescopeAuth()

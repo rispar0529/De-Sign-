@@ -16,6 +16,7 @@ class WorkflowState(TypedDict):
     signing_result: Dict[str, Any]
     scheduling_result: Dict[str, Any]
     workflow_complete: bool
+    notification_email: str  # 🆕 Add this field
     final_status: str
     error: str
     waiting_for_input: bool
@@ -65,27 +66,29 @@ class DocumentWorkflow:
         state['waiting_for_input'] = True
         state['input_type'] = 'approval'
         state['next_node'] = 'wait_for_approval'
-        
+
         # Pause execution and wait for resume with user input
         user_input = interrupt("Waiting for approval decision")
-        
+
         # The user input comes through the resume mechanism
-        # It will be the actual input data passed to continue_workflow
         if isinstance(user_input, dict) and 'approved' in user_input:
             state['user_approved'] = user_input['approved']
         else:
             state['user_approved'] = user_input if isinstance(user_input, bool) else False
-        
+
+        # ✅ IMPORTANT: Clear the waiting state when approval is received
         state['waiting_for_input'] = False
+        state['input_type'] = ''  # Clear the input type
+        
         print(f"[Workflow] Approval received: {state['user_approved']}")
         
         return state
 
+
     def _wait_for_meeting_date(self, state):
         """Wait for meeting date input using interrupt"""
         print(f"[Workflow] Checking approval status: {state.get('user_approved')}")
-        
-        # Only proceed if user approved
+
         if not state.get('user_approved', False):
             print("[Workflow] User did not approve, completing workflow")
             state['workflow_complete'] = True
@@ -93,24 +96,28 @@ class DocumentWorkflow:
             state['waiting_for_input'] = False
             return state
 
-        print("[Workflow] Waiting for meeting date...")
+        print("[Workflow] Waiting for meeting date and email...")
         state['waiting_for_input'] = True
         state['input_type'] = 'meeting_date'
         state['next_node'] = 'wait_for_meeting_date'
-        
-        # Pause execution and wait for resume with user input
+
         user_input = interrupt("Waiting for meeting date")
-        
-        # The user input comes through the resume mechanism
-        if isinstance(user_input, dict) and 'meeting_date' in user_input:
-            state['meeting_date'] = user_input['meeting_date']
+
+        # 🆕 Handle both meeting_date and notification_email
+        if isinstance(user_input, dict):
+            if 'meeting_date' in user_input:
+                state['meeting_date'] = user_input['meeting_date']
+            if 'notification_email' in user_input:  # 🆕 Handle email input
+                state['notification_email'] = user_input['notification_email']
         else:
             state['meeting_date'] = str(user_input) if user_input else ''
-        
+
         state['waiting_for_input'] = False
         print(f"[Workflow] Meeting date received: {state['meeting_date']}")
+        print(f"[Workflow] Notification email: {state.get('notification_email', 'Not provided')}")
         
         return state
+
 
     def _agent_c_sign(self, state):
         """Execute Agent C (Document Signing)"""

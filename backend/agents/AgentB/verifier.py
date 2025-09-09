@@ -96,7 +96,7 @@ def generate_hackathon_llm_prompt(contract_text: str) -> str:
     """
     return prompt
 
-@cached(cache)
+# @cached(cache)
 async def analyze_contract_text(contract_text: str, api_key: str):
     """Asynchronously analyzes contract text using the Gemini LLM with the advanced prompt."""
     try:

@@ -23,7 +23,7 @@ class AgentC:
             # Extract data from state
             session_id = state.get('session_id')
             meeting_date = state.get('meeting_date')
-            risk_assessment = state.get('risk_assessment', {})
+            # risk_assessment = state.get('risk_assessment', {})
             file_path = state.get('file_path')
             
             # Generate signature details
@@ -112,10 +112,23 @@ class AgentC:
             if field not in state or not state[field]:
                 print(f"[{self.agent_name}] Missing required field: {field}")
                 return False
-        
+
+        # ✅ Validate specific risk assessment structure
+        risk_assessment = state.get('risk_assessment', {})
+        if 'risk_level' not in risk_assessment:
+            print(f"[{self.agent_name}] risk_assessment missing 'risk_level' field")
+            return False
+
         # Check if user approved
         if not state.get('user_approved', False):
             print(f"[{self.agent_name}] Document not approved by user")
             return False
-            
+
+        # ✅ Optional: Add risk-based validation
+        risk_level = risk_assessment.get('risk_level', 'Low')
+        print(f"[{self.agent_name}] Document risk level: {risk_level}")
+        
+        # You can add additional logic here based on risk level
+        # For example, require additional approvals for high-risk documents
+        
         return True
