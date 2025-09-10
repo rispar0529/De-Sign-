@@ -37,6 +37,7 @@ fastapi==0.116.1
 fastjsonschema==2.21.1
 Flask==3.1.2
 flask-cors==6.0.1
+Flask-Mail==0.10.0
 flatbuffers==25.2.10
 fonttools==4.59.0
 fqdn==1.5.1

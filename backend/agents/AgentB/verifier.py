@@ -16,7 +16,6 @@ from cachetools import cached, TTLCache
 # Set up structured logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# High-impact clauses for a winning hackathon project
 CLAUSES_TO_CHECK = [
     "Indemnification", "Limitation of Liability", "Intellectual Property Rights",
     "Confidentiality", "Termination for Cause", "Governing Law & Jurisdiction",
@@ -161,7 +160,7 @@ async def generate_plain_english_summary(contract_text: str, api_key: str) -> st
         logging.error(f"An unexpected error occurred during summary generation: {e}")
         return "Error: Could not generate summary."
 
-# --- NEW: Feature 1 - Interactive Q&A ---
+# ---  Feature 1 - Interactive Q&A ---
 async def answer_contract_question(contract_text: str, user_question: str, api_key: str) -> str:
     """Answers a user's question based only on the provided contract text."""
     try:

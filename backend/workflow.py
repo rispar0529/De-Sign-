@@ -16,7 +16,7 @@ class WorkflowState(TypedDict):
     signing_result: Dict[str, Any]
     scheduling_result: Dict[str, Any]
     workflow_complete: bool
-    notification_email: str  # 🆕 Add this field
+    notification_email: str  
     final_status: str
     error: str
     waiting_for_input: bool
@@ -76,9 +76,9 @@ class DocumentWorkflow:
         else:
             state['user_approved'] = user_input if isinstance(user_input, bool) else False
 
-        # ✅ IMPORTANT: Clear the waiting state when approval is received
+        #  IMPORTANT: Clear the waiting state when approval is received
         state['waiting_for_input'] = False
-        state['input_type'] = ''  # Clear the input type
+        state['input_type'] = '' 
         
         print(f"[Workflow] Approval received: {state['user_approved']}")
         
@@ -103,11 +103,11 @@ class DocumentWorkflow:
 
         user_input = interrupt("Waiting for meeting date")
 
-        # 🆕 Handle both meeting_date and notification_email
+        #  Handle both meeting_date and notification_email
         if isinstance(user_input, dict):
             if 'meeting_date' in user_input:
                 state['meeting_date'] = user_input['meeting_date']
-            if 'notification_email' in user_input:  # 🆕 Handle email input
+            if 'notification_email' in user_input:  
                 state['notification_email'] = user_input['notification_email']
         else:
             state['meeting_date'] = str(user_input) if user_input else ''
@@ -210,7 +210,6 @@ class DocumentWorkflow:
             print(f"[Workflow] Continuing workflow for session: {session_id} with input: {human_input}")
             thread_config = {"configurable": {"thread_id": session_id}}
             
-            # Resume the workflow with user input using Command
             from langgraph.types import Command
             result = self.workflow.invoke(
                 Command(resume=human_input),

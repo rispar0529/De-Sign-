@@ -4,10 +4,10 @@ import os
 from datetime import datetime
 import uuid
 from werkzeug.utils import secure_filename
-from functools import wraps  # Add this import
-import asyncio  # Add this import
+from functools import wraps 
+import asyncio 
 from auth.login import LoginHandler
-from flask_mail import Mail, Message  # 🆕 Add this
+from flask_mail import Mail, Message 
 from agents.email_service import send_meeting_confirmation_email 
 
 
@@ -29,7 +29,6 @@ from agents.AgentB.verifier import (
     verify_contract_clauses,
     generate_clause_suggestion,
     generate_plain_english_summary,
-    answer_contract_question,
     extract_text_from_pdf,
     extract_text_from_docx,
     extract_text_from_image
@@ -50,16 +49,16 @@ CORS(app,
 
 app.config.update({
     'MAIL_SERVER': 'smtp.gmail.com',
-    'MAIL_PORT': 587,                    # Use 587 for TLS
-    'MAIL_USE_TLS': True,               # Enable TLS
-    'MAIL_USE_SSL': False,              # Disable SSL when using TLS
+    'MAIL_PORT': 587,                   
+    'MAIL_USE_TLS': True,               
+    'MAIL_USE_SSL': False,              
     'MAIL_USERNAME': os.getenv('EMAIL_USER'),
     'MAIL_PASSWORD': os.getenv('EMAIL_PASS'),
     'MAIL_DEFAULT_SENDER': os.getenv('EMAIL_USER'),
-    'MAIL_DEBUG': True,                 # Enable debugging
-    'MAIL_SUPPRESS_SEND': False,        # Allow actual sending
-    'MAIL_FAIL_SILENTLY': False,        # Show errors
-    'TESTING': False                    # Disable testing mode
+    'MAIL_DEBUG': True,                 
+    'MAIL_SUPPRESS_SEND': False,       
+    'MAIL_FAIL_SILENTLY': False,        
+    'TESTING': False                    
 })
 
 
@@ -75,30 +74,10 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Initialize components
 workflow_manager = DocumentWorkflow()
-# agent_b = AgentB()
 auth_handler = DescopeAuth()
 
-# In-memory storage (use database in production)
 sessions = {}
 
-# Async wrapper for Flask routes
-# def async_route(f):
-#     @wraps(f)
-#     def wrapper(*args, **kwargs):
-#         try:
-#             # Check if there's a running event loop
-#             loop = asyncio.get_event_loop()
-#             if loop.is_running():
-#                 # If there's a running loop, we need to handle it differently
-#                 # For Flask with async support, just return the coroutine
-#                 return asyncio.create_task(f(*args, **kwargs))
-#             else:
-#                 # No running loop, safe to use asyncio.run
-#                 return asyncio.run(f(*args, **kwargs))
-#         except RuntimeError:
-#             # No event loop, create one
-#             return asyncio.run(f(*args, **kwargs))
-#     return wrapper
 
 def sync_async(async_func):
     @wraps(async_func)
@@ -140,7 +119,6 @@ def extract_text_from_uploaded_file(file_path: str, content_type: str) -> str:
         with open(file_path, 'rb') as file:
             file_bytes = file.read()
             
-        # Use the extraction functions from agents.AgentB.verifier.py
         if content_type == "application/pdf":
             from agents.AgentB.verifier import extract_text_from_pdf
             return extract_text_from_pdf(file_bytes)
@@ -200,7 +178,6 @@ login_handler = LoginHandler()
 def login():
     """Login endpoint - authenticate user with Descope"""
     try:
-        # Check content type
         if not request.is_json:
             return jsonify({'error': 'Content-Type must be application/json'}), 400
             
@@ -241,7 +218,6 @@ def login():
         return jsonify({'error': 'Internal server error'}), 500
 
 
-# Fixed profile route
 @app.route('/auth/profile', methods=['GET'])
 def get_profile():
     """Get user profile - updated to use login handler validation"""
@@ -277,7 +253,7 @@ def get_profile():
 
 @app.route('/upload', methods=['POST'])
 @require_auth()
-@sync_async  # Add this decorator since we'll use async
+@sync_async
 async def upload_and_start_workflow():
     """Combined: Handle file upload, risk assessment, and start workflow"""
     try:
@@ -301,7 +277,6 @@ async def upload_and_start_workflow():
         print(f"File saved to: {file_path}")
         content_type = file.content_type or "application/octet-stream"
 
-        # ✅ NEW: AI-Powered Risk Assessment using your verifier
         with open(file_path, 'rb') as f:
             file_bytes = f.read()
 
@@ -313,13 +288,13 @@ async def upload_and_start_workflow():
         )
 
         if "error" in analysis_result:
-            os.remove(file_path)  # Clean up
+            os.remove(file_path) 
             return jsonify({'error': analysis_result["error"]}), 400
 
-        # ✅ Extract risk levels from analysis
+        #  Extract risk levels from analysis
         risk_levels = [clause.get('risk_level', 'Low') for clause in analysis_result.get('analysis', [])]
 
-        # ✅ Map risk levels to numeric values and find maximum
+        #  Map risk levels to numeric values and find maximum
         def risk_value(level):
             mapping = {'Low': 1, 'Medium': 2, 'High': 3}
             return mapping.get(level, 0)
@@ -329,7 +304,7 @@ async def upload_and_start_workflow():
         else:
             max_risk_level = 'Low'  # Default if no analysis
 
-        # ✅ Create comprehensive risk assessment
+        # Create comprehensive risk assessment
         risk_assessment = {
             'risk_level': max_risk_level,
             'analyzed_at': datetime.now().isoformat(),
@@ -337,7 +312,7 @@ async def upload_and_start_workflow():
             'high_risk_clauses': len([r for r in risk_levels if r == 'High']),
             'medium_risk_clauses': len([r for r in risk_levels if r == 'Medium']),
             'low_risk_clauses': len([r for r in risk_levels if r == 'Low']),
-            'details': analysis_result,  # Include full analysis
+            'details': analysis_result, 
             'assessor': 'AI Contract Analyzer'
         }
 
@@ -349,8 +324,8 @@ async def upload_and_start_workflow():
             user_id=g.current_user['user_id'],
             file_path=file_path,
             filename=filename,
-            risk_assessment=risk_assessment,  # ✅ NOW INCLUDED!
-            notification_email='',  # 🆕 Initialize empty
+            risk_assessment=risk_assessment,  
+            notification_email='',  
             user_approved=False,
             meeting_date='',
             signing_result={},
@@ -376,7 +351,7 @@ async def upload_and_start_workflow():
             'file_path': file_path,
             'filename': filename,
             'content-type': content_type,
-            'risk_assessment': risk_assessment,  # ✅ Store it
+            'risk_assessment': risk_assessment,
             'workflow_state': workflow_result,
             'created_at': datetime.now().isoformat(),
             'status': 'workflow_started'
@@ -386,7 +361,7 @@ async def upload_and_start_workflow():
 
         return jsonify({
             'session_id': session_id,
-            'risk_assessment': risk_assessment,  # ✅ Return to frontend
+            'risk_assessment': risk_assessment,  
             'content-type': content_type,
             'workflow_started': True,
             'waiting_for_input': workflow_result.get('waiting_for_input', False),
@@ -425,7 +400,6 @@ async def contract_verify():
         if session_data['user_id'] != g.current_user['user_id']:
             return jsonify({'error': 'Unauthorized access to session'}), 403
 
-        # Check if analysis already exists (cached)
         if 'contract_analysis' in session_data:
             return jsonify({
                 'session_id': session_id,
@@ -434,14 +408,8 @@ async def contract_verify():
                 'message': 'Contract analysis retrieved from cache'
             })
 
-        # Get API key from header for fresh analysis
-        # gemini_api_key = request.headers.get('X-API-Key')
-        # if not gemini_api_key:
-        #     return jsonify({'error': 'Gemini API key required in X-API-Key header'}), 400
-
-        # Perform fresh analysis
+       
         file_path = session_data['file_path']
-        # content_type = session_data['content_type']
         content_type = sessions[session_id].get('content-type')
 
         
@@ -457,7 +425,6 @@ async def contract_verify():
         if "error" in verification_result:
             return jsonify({'error': verification_result["error"]}), 400
 
-        # Cache the result
         sessions[session_id]['contract_analysis'] = verification_result
 
         return jsonify({
@@ -500,12 +467,7 @@ async def contract_summarize():
                 'message': 'Contract summary retrieved from cache'
             })
 
-        # Get API key for fresh summary
-        # gemini_api_key = request.headers.get('X-API-Key')
-        # if not gemini_api_key:
-        #     return jsonify({'error': 'Gemini API key required in X-API-Key header'}), 400
-
-        # Extract text and generate summary
+       
         file_path = session_data['file_path']
         content_type = sessions[session_id].get('content-type')
         
@@ -580,69 +542,6 @@ async def contract_suggest_clause():
         print(f"Clause suggestion error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# @app.route('/start-workflow', methods=['POST'])
-# @require_auth(permission='upload_file')
-# def start_workflow():
-#     """Step 2: Start workflow after risk assessment"""
-#     try:
-#         data = request.get_json()
-#         session_id = data.get('session_id')
-        
-#         if not session_id:
-#             return jsonify({'error': 'Session ID is required'}), 400
-        
-#         if session_id not in sessions:
-#             return jsonify({'error': 'Invalid session ID'}), 400
-        
-#         session_data = sessions[session_id]
-        
-#         # Check if user owns this session
-#         if session_data['user_id'] != g.current_user['user_id']:
-#             return jsonify({'error': 'Unauthorized access to session'}), 403
-        
-#         # Create initial workflow state
-#         initial_state = WorkflowState(
-#             session_id=session_id,
-#             user_id=g.current_user['user_id'],
-#             file_path=session_data.get('file_path', ''),
-#             filename=session_data.get('filename', ''),
-#             risk_assessment=session_data.get('risk_assessment', {}),
-#             user_approved=False,
-#             meeting_date='',
-#             signing_result={},
-#             scheduling_result={},
-#             workflow_complete=False,
-#             final_status='',
-#             error='',
-#             waiting_for_input=True,
-#             input_type='',
-#             human_input=None,
-#             next_node=''
-#         )
-        
-#         print(f"Starting workflow for session: {session_id}")
-        
-#         # Start the workflow
-#         result = workflow_manager.start_workflow(initial_state)
-        
-#         # Update session
-#         sessions[session_id]['workflow_state'] = result
-#         sessions[session_id]['status'] = 'workflow_started'
-        
-#         print(f"Workflow started, waiting for: {result.get('input_type', 'unknown')}")
-        
-#         return jsonify({
-#             'session_id': session_id,
-#             'workflow_started': True,
-#             'waiting_for_input': result.get('waiting_for_input', False),
-#             'input_type': result.get('input_type', ''),
-#             'risk_assessment': session_data.get('risk_assessment', {}),
-#             'message': 'Workflow started. Please review the risk assessment and approve or reject.'
-#         })
-        
-#     except Exception as e:
-#         print(f"Start workflow error: {str(e)}")
-#         return jsonify({'error': str(e)}), 500
 
 @app.route('/provide-input', methods=['POST'])
 @require_auth()
@@ -691,14 +590,13 @@ def provide_input():
         # Update session
         sessions[session_id]['workflow_state'] = result
 
-        # DEBUG: Add this line to see what the workflow returns
+        # Add this line to see what the workflow returns
         print(f"[DEBUG] Workflow result: {result}")
 
-        # ✅ NEW: Handle LangGraph interrupts properly
+        #  LangGraph interrupts properly
         if '__interrupt__' in result and result['__interrupt__']:
             interrupt_info = result['__interrupt__'][0] if result['__interrupt__'] else None
             if interrupt_info and 'meeting date' in str(interrupt_info.value).lower():
-                # Override the state to show we're waiting for meeting date
                 result['waiting_for_input'] = True
                 result['input_type'] = 'meeting_date'
                 print("[DEBUG] ✅ Detected meeting date interrupt, updating state")
@@ -741,7 +639,7 @@ def provide_input():
         else:
             response['message'] = 'Processing workflow...'
 
-        # IMPORTANT: Add this debug line
+        # Add this debug line
         print(f"[DEBUG] ✅ Final response being sent: {response}")
 
         return jsonify(response)

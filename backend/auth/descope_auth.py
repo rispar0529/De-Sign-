@@ -2,8 +2,7 @@ from functools import wraps
 from flask import request, jsonify, g
 import os
 from descope import DescopeClient, AuthException
-# import jwt
-# import requests
+
 
 class DescopeAuth:
     """Real Descope authentication handler"""
@@ -15,7 +14,6 @@ class DescopeAuth:
         
         if not self.project_id:
             print("WARNING: DESCOPE_PROJECT_ID not found in environment")
-            # Fallback to mock mode
             self.mock_mode = True
             self._init_mock_mode()
             return

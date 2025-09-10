@@ -14,7 +14,7 @@ class AgentD:
             # Extract data from state
             session_id = state.get('session_id')
             meeting_date = state.get('meeting_date')
-            notification_email = state.get('notification_email')  # Get custom email
+            notification_email = state.get('notification_email')  
             signing_result = state.get('signing_result', {})
 
             # Validate signing was successful
@@ -48,7 +48,7 @@ class AgentD:
                 'message': f'Meeting successfully scheduled for {meeting_datetime.strftime("%Y-%m-%d at %H:%M UTC")}'
             }
 
-            # 🆕 FIXED: Send email notification using Flask-Mail
+            # Send email notification using Flask-Mail
             email_sent = False
             if notification_email:
                 email_sent = self._send_email_notification(notification_email, meeting_datetime, meeting_id, confirmation_code, state)
@@ -90,9 +90,8 @@ class AgentD:
             
             # Get the mail instance from current app context
             with current_app.app_context():
-                from main import mail  # Import mail from main.py
+                from main import mail  
                 
-                # Prepare email content
                 subject = "🗓️ Meeting Scheduled - Contract Processing Complete"
                 body = f"""
 Dear User,

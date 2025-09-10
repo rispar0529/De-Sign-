@@ -12,7 +12,6 @@ def send_meeting_confirmation_email(self, to_email, meeting_datetime, meeting_id
         from flask import current_app
         from flask_mail import Message
         
-        # Get mail instance - NO app_context() wrapper needed
         from main import mail
         
         # Prepare email content

@@ -2,3 +2,5 @@ __pycache__/
 .venv/
 .env
 uploads/
+abc.txt
+Text-to-PDF-CSt.pdf

@@ -16,7 +16,6 @@ class LoginHandler:
         except Exception as e:
             raise ValueError(f"Failed to initialize Descope client: {e}")
     
-    # Replace your authenticate_user method in login.py with this:
 
     def authenticate_user(self, login_id: str, password: str):
         """Authenticate user with Descope and return user info + token"""
@@ -31,7 +30,7 @@ class LoginHandler:
             
             print(f"Authentication successful for user: {login_id}")
             
-            # CORRECT: Extract the JWT string from the nested structure
+            # Extract the JWT string from the nested structure
             session_token_obj = resp.get('sessionToken', {})
             session_jwt = session_token_obj.get('jwt')
             
@@ -57,7 +56,7 @@ class LoginHandler:
             
             return {
                 'success': True,
-                'token': session_jwt,  # This is now the actual JWT string
+                'token': session_jwt,  
                 'refresh_token': refresh_jwt,
                 'user': user_info
             }
@@ -78,14 +77,13 @@ class LoginHandler:
         try:
             print(f"Validating session token: {token[:20]}...")
             
-            # Make sure we're passing the JWT string correctly
             jwt_response = self.descope_client.validate_session(session_token=token)
             
             user_info = {
                 'user_id': jwt_response.get('sub'),
                 'email': jwt_response.get('email'),
                 'name': jwt_response.get('name', ''),
-                'roles': jwt_response.get('roles', []),  # Note: might be 'roleNames' 
+                'roles': jwt_response.get('roles', []),   
                 'permissions': jwt_response.get('permissions', [])
             }
             

@@ -23,7 +23,6 @@ class AgentC:
             # Extract data from state
             session_id = state.get('session_id')
             meeting_date = state.get('meeting_date')
-            # risk_assessment = state.get('risk_assessment', {})
             file_path = state.get('file_path')
             
             # Generate signature details
@@ -55,11 +54,10 @@ class AgentC:
                 'message': 'Document successfully signed and ready for scheduling'
             }
             
-            # Update state - CRITICAL: Create a new state dict to avoid mutation issues
             updated_state = state.copy()
             updated_state.update({
                 'signing_result': signing_result,
-                'document_signed': True,  # This is the key field that was missing in WorkflowState
+                'document_signed': True,  
                 'next_agent': 'agent_d',
                 'signing_timestamp': timestamp
             })
@@ -113,7 +111,6 @@ class AgentC:
                 print(f"[{self.agent_name}] Missing required field: {field}")
                 return False
 
-        # ✅ Validate specific risk assessment structure
         risk_assessment = state.get('risk_assessment', {})
         if 'risk_level' not in risk_assessment:
             print(f"[{self.agent_name}] risk_assessment missing 'risk_level' field")
@@ -124,11 +121,8 @@ class AgentC:
             print(f"[{self.agent_name}] Document not approved by user")
             return False
 
-        # ✅ Optional: Add risk-based validation
         risk_level = risk_assessment.get('risk_level', 'Low')
         print(f"[{self.agent_name}] Document risk level: {risk_level}")
         
-        # You can add additional logic here based on risk level
-        # For example, require additional approvals for high-risk documents
         
         return True
