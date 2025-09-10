@@ -150,7 +150,7 @@ const Upload = () => {
                   <Description sx={{ fontSize: 40, color: '#667eea', mr: 2 }} />
                   <Box>
                     <Typography variant="h4" component="h1" fontWeight={700}>
-                      ContractPro Dashboard
+                      De-Sign Dashboard
                     </Typography>
                     <Typography variant="subtitle1" color="text.secondary">
                       Upload and analyze your contracts with AI-powered insights
