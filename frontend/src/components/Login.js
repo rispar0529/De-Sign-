@@ -113,7 +113,7 @@ const Login = () => {
               mb: 1
             }}
           >
-            ContractPro
+            De-Sign
           </Typography>
           <Typography
             variant="h6"
