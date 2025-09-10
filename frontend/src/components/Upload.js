@@ -2,6 +2,34 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { documentAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  Box,
+  Container,
+  Card,
+  CardContent,
+  Typography,
+  Button,
+  Alert,
+  CircularProgress,
+  Paper,
+  Chip,
+  Divider,
+  Grid,
+  LinearProgress
+} from '@mui/material';
+import {
+  CloudUpload,
+  Description,
+  Person,
+  Logout,
+  CheckCircle,
+  InsertDriveFile
+} from '@mui/icons-material';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useDropzone } from 'react-dropzone';
+
+const MotionCard = motion(Card);
+const MotionBox = motion(Box);
 
 const Upload = () => {
   const [file, setFile] = useState(null);
@@ -10,172 +38,425 @@ const Upload = () => {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
 
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
-    setError('');
-    console.log('File selected:', e.target.files[0]?.name);
-  };
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: (acceptedFiles) => {
+      setFile(acceptedFiles[0]);
+      setError('');
+    },
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+    },
+    maxSize: 16 * 1024 * 1024, // 16MB
+    multiple: false
+  });
 
   const handleUpload = async () => {
     if (!file) {
-        setError('Please select a file');
-        return;
+      setError('Please select a file');
+      return;
     }
-    
-    console.log('Starting upload for file:', file.name);
+
     setUploading(true);
     setError('');
-    
+
     try {
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-            setError('Authentication token missing. Please login again.');
-            logout();
-            navigate('/login');
-            return;
-        }
-        
-        const response = await documentAPI.upload(file);
-        console.log('Upload response:', response.data);
-        
-        const { session_id } = response.data;
-        if (!session_id) {
-            setError('Invalid response from server - no session ID received');
-            return;
-        }
-        
-        navigate('/analysis', { 
-            state: { 
-                sessionId: session_id, 
-                filename: file.name, 
-                uploadSuccess: true 
-            } 
-        });
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setError('Authentication token missing. Please login again.');
+        logout();
+        navigate('/login');
+        return;
+      }
 
-        if (response.data.session_id) {
-        navigate('/analysis', { 
-            state: { 
-                sessionId: response.data.session_id, 
-                filename: file.name,
-                risk_assessment: response.data.risk_assessment  // ✅ Pass this
-            } 
+      const response = await documentAPI.upload(file);
+      
+      if (response.data.session_id) {
+        navigate('/analysis', {
+          state: {
+            sessionId: response.data.session_id,
+            filename: file.name,
+            risk_assessment: response.data.risk_assessment
+          }
         });
-    }
-        
+      }
     } catch (error) {
-        console.error('Upload error:', error);
-        // Handle error cases...
-        if (error.response) {
-            const status = error.response.status;
-            const errorMessage = error.response.data?.error || 'Upload failed';
-            
-            if (status === 401) {
-                setError('Authentication failed. Please login again.');
-                logout();
-                navigate('/login');
-            } else if (status === 413) {
-                setError('File too large. Maximum size is 16MB.');
-            } else if (status === 400) {
-                setError(errorMessage);
-            } else {
-                setError(`Upload failed: ${errorMessage}`);
-            }
-        } else if (error.request) {
-            setError('Cannot connect to server. Please check your connection.');
+      if (error.response) {
+        const status = error.response.status;
+        const errorMessage = error.response.data?.error || 'Upload failed';
+        
+        if (status === 401) {
+          setError('Authentication failed. Please login again.');
+          logout();
+          navigate('/login');
+        } else if (status === 413) {
+          setError('File too large. Maximum size is 16MB.');
+        } else if (status === 400) {
+          setError(errorMessage);
         } else {
-            setError(`Upload failed: ${error.message}`);
+          setError(`Upload failed: ${errorMessage}`);
         }
+      } else if (error.request) {
+        setError('Cannot connect to server. Please check your connection.');
+      } else {
+        setError(`Upload failed: ${error.message}`);
+      }
     } finally {
-        setUploading(false);
+      setUploading(false);
     }
-};
-
+  };
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   return (
-    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <div>
-          <h2>Upload Contract Document</h2>
-          {user && <p style={{ color: '#666', fontSize: '14px' }}>Logged in as: {user.email}</p>}
-        </div>
-        <button 
-          onClick={handleLogout} 
-          style={{ 
-            padding: '8px 16px', 
-            backgroundColor: '#dc3545', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: 'pointer' 
-          }}
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        py: 4
+      }}
+    >
+      <Container maxWidth="lg">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
         >
-          Logout
-        </button>
-      </div>
+          <Paper
+            elevation={4}
+            sx={{
+              p: 3,
+              mb: 4,
+              borderRadius: 3,
+              background: 'linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%)'
+            }}
+          >
+            <Grid container alignItems="center" justifyContent="space-between">
+              <Grid item>
+                <Box display="flex" alignItems="center">
+                  <Description sx={{ fontSize: 40, color: '#667eea', mr: 2 }} />
+                  <Box>
+                    <Typography variant="h4" component="h1" fontWeight={700}>
+                      ContractPro Dashboard
+                    </Typography>
+                    <Typography variant="subtitle1" color="text.secondary">
+                      Upload and analyze your contracts with AI-powered insights
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              <Grid item>
+                <Box display="flex" alignItems="center" gap={2}>
+                  <Chip
+                    icon={<Person />}
+                    label={`Logged in as: ${user?.email}`}
+                    color="primary"
+                    variant="outlined"
+                    sx={{ px: 2 }}
+                  />
+                  <Button
+                    variant="outlined"
+                    onClick={handleLogout}
+                    startIcon={<Logout />}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none'
+                    }}
+                  >
+                    Logout
+                  </Button>
+                </Box>
+              </Grid>
+            </Grid>
+          </Paper>
+        </motion.div>
 
-      <div style={{ border: '2px dashed #ccc', padding: '40px', textAlign: 'center', marginBottom: '20px', borderRadius: '8px' }}>
-        <input
-          type="file"
-          accept=".pdf,.docx,.jpg,.jpeg,.png"
-          onChange={handleFileChange}
-          style={{ marginBottom: '20px' }}
-          disabled={uploading}
-        />
-        
-        {file && (
-          <div style={{ margin: '15px 0', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-            <p><strong>Selected:</strong> {file.name}</p>
-            <p><strong>Size:</strong> {(file.size / (1024 * 1024)).toFixed(2)} MB</p>
-            <p><strong>Type:</strong> {file.type}</p>
-          </div>
-        )}
+        <Grid container spacing={4}>
+          {/* Upload Section */}
+          <Grid item xs={12} lg={8}>
+            <MotionCard
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              elevation={8}
+              sx={{
+                borderRadius: 4,
+                background: 'linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%)',
+                height: 'fit-content'
+              }}
+            >
+              <CardContent sx={{ p: 6 }}>
+                <Box display="flex" alignItems="center" mb={4}>
+                  <CloudUpload sx={{ fontSize: 48, color: '#667eea', mr: 2 }} />
+                  <Box>
+                    <Typography variant="h4" component="h2" fontWeight={600}>
+                      Document Upload
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                      Upload your contract for AI-powered analysis
+                    </Typography>
+                  </Box>
+                </Box>
 
-        <button
-          onClick={handleUpload}
-          disabled={uploading || !file}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: uploading ? '#6c757d' : (!file ? '#dee2e6' : '#28a745'),
-            color: uploading || !file ? '#6c757d' : 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: uploading || !file ? 'not-allowed' : 'pointer',
-            fontSize: '16px',
-            fontWeight: 'bold'
-          }}
-        >
-          {uploading ? 'Uploading...' : 'Upload & Analyze'}
-        </button>
-      </div>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+                      {error}
+                    </Alert>
+                  </motion.div>
+                )}
 
-      {error && (
-        <div style={{ 
-          color: '#721c24', 
-          padding: '10px', 
-          backgroundColor: '#f8d7da', 
-          border: '1px solid #f5c6cb',
-          borderRadius: '4px',
-          marginBottom: '20px'
-        }}>
-          <strong>Error:</strong> {error}
-        </div>
-      )}
+                {/* Dropzone */}
+                <Paper
+                  {...getRootProps()}
+                  elevation={isDragActive ? 8 : 2}
+                  sx={{
+                    p: 6,
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    borderRadius: 3,
+                    border: isDragActive ? '2px dashed #667eea' : '2px dashed #ccc',
+                    bgcolor: isDragActive ? 'rgba(102, 126, 234, 0.05)' : 'grey.50',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      bgcolor: 'rgba(102, 126, 234, 0.05)',
+                      borderColor: '#667eea'
+                    }
+                  }}
+                >
+                  <input {...getInputProps()} />
+                  <motion.div
+                    animate={isDragActive ? { scale: 1.05 } : { scale: 1 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <CloudUpload sx={{ fontSize: 80, color: '#667eea', mb: 2 }} />
+                    <Typography variant="h5" gutterBottom>
+                      {isDragActive ? 'Drop your file here' : 'Drag & drop your contract'}
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                      or click to browse files
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Supported formats: PDF, DOC, DOCX • Max size: 16MB
+                    </Typography>
+                  </motion.div>
+                </Paper>
 
-      <div style={{ marginTop: '20px', fontSize: '14px', color: '#666' }}>
-        <h4>Upload Guidelines:</h4>
-        <ul style={{ textAlign: 'left' }}>
-          <li>Supported formats: PDF, DOCX, JPG, PNG</li>
-          <li>Maximum file size: 16MB</li>
-          <li>Ensure the document is clearly readable</li>
-          <li>For images, use high resolution for better text extraction</li>
-        </ul>
-      </div>
-    </div>
+                {/* File Preview */}
+                <AnimatePresence>
+                  {file && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                    >
+                      <Paper
+                        elevation={3}
+                        sx={{
+                          mt: 3,
+                          p: 3,
+                          borderRadius: 2,
+                          background: 'linear-gradient(145deg, #f0f4ff 0%, #ffffff 100%)'
+                        }}
+                      >
+                        <Box display="flex" alignItems="center" mb={2}>
+                          <CheckCircle sx={{ color: '#4caf50', mr: 2 }} />
+                          <Typography variant="h6" fontWeight={600}>
+                            File Selected
+                          </Typography>
+                        </Box>
+                        
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={4}>
+                            <Box display="flex" alignItems="center">
+                              <InsertDriveFile sx={{ color: '#667eea', mr: 1 }} />
+                              <Box>
+                                <Typography variant="body2" color="text.secondary">
+                                  Name
+                                </Typography>
+                                <Typography variant="body1" fontWeight={500}>
+                                  {file.name}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          </Grid>
+                          <Grid item xs={12} md={4}>
+                            <Box>
+                              <Typography variant="body2" color="text.secondary">
+                                Size
+                              </Typography>
+                              <Typography variant="body1" fontWeight={500}>
+                                {formatFileSize(file.size)}
+                              </Typography>
+                            </Box>
+                          </Grid>
+                          <Grid item xs={12} md={4}>
+                            <Box>
+                              <Typography variant="body2" color="text.secondary">
+                                Type
+                              </Typography>
+                              <Typography variant="body1" fontWeight={500}>
+                                {file.type || 'Unknown'}
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        </Grid>
+                      </Paper>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <Divider sx={{ my: 4 }} />
+
+                {/* Upload Button */}
+                <Box textAlign="center">
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={handleUpload}
+                    disabled={!file || uploading}
+                    sx={{
+                      py: 2,
+                      px: 6,
+                      borderRadius: 3,
+                      fontSize: '1.1rem',
+                      textTransform: 'none',
+                      background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                      '&:hover': {
+                        background: 'linear-gradient(45deg, #5a6fd8, #6a419a)',
+                      },
+                      '&:disabled': {
+                        background: 'grey.300'
+                      }
+                    }}
+                    startIcon={
+                      uploading ? (
+                        <CircularProgress size={20} color="inherit" />
+                      ) : (
+                        <CloudUpload />
+                      )
+                    }
+                  >
+                    {uploading ? 'Processing...' : 'Upload & Analyze'}
+                  </Button>
+                  
+                  {uploading && (
+                    <MotionBox
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      sx={{ mt: 2 }}
+                    >
+                      <LinearProgress
+                        sx={{
+                          height: 8,
+                          borderRadius: 1,
+                          bgcolor: 'grey.200',
+                          '& .MuiLinearProgress-bar': {
+                            background: 'linear-gradient(45deg, #667eea, #764ba2)'
+                          }
+                        }}
+                      />
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        Analyzing document with AI...
+                      </Typography>
+                    </MotionBox>
+                  )}
+                </Box>
+              </CardContent>
+            </MotionCard>
+          </Grid>
+
+          {/* Info Panel */}
+          <Grid item xs={12} lg={4}>
+            <MotionCard
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              elevation={8}
+              sx={{
+                borderRadius: 4,
+                background: 'linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%)',
+                height: 'fit-content'
+              }}
+            >
+              <CardContent sx={{ p: 4 }}>
+                <Typography variant="h5" fontWeight={600} gutterBottom>
+                  📊 What We Analyze
+                </Typography>
+                <Divider sx={{ mb: 3 }} />
+                
+                <Box mb={3}>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    🔍 Risk Assessment
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    AI-powered analysis of contract clauses and potential risks
+                  </Typography>
+                </Box>
+                
+                <Box mb={3}>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    📋 Contract Verification
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Comprehensive review of terms and conditions
+                  </Typography>
+                </Box>
+                
+                <Box mb={3}>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    📝 Smart Summarization
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Key points extraction and executive summary
+                  </Typography>
+                </Box>
+                
+                <Box>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    💡 Clause Suggestions
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Intelligent recommendations for contract improvements
+                  </Typography>
+                </Box>
+
+                <Paper
+                  elevation={2}
+                  sx={{
+                    mt: 4,
+                    p: 2,
+                    bgcolor: 'rgba(102, 126, 234, 0.05)',
+                    borderRadius: 2,
+                    textAlign: 'center'
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    🔒 Your documents are processed securely and never stored permanently
+                  </Typography>
+                </Paper>
+              </CardContent>
+            </MotionCard>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
   );
 };
 
