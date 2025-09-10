@@ -137,7 +137,7 @@ The frontend will be available at: `http://localhost:3000`
 ---
 
 ## Demo Video Link
-[Add YouTube/Streaming Link Here]
+https://www.youtube.com/watch?v=gxOaIBGAUio
 
 ---
 
